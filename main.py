@@ -5,6 +5,7 @@ send back to their younger self. Standard library only.
 """
 
 import os
+import stat
 import sys
 
 LINE = (
@@ -12,6 +13,35 @@ LINE = (
     "\u2014 one day you'll pay good money for food that never tastes "
     "like home again."
 )
+
+
+def _remove(path):
+    """Remove a file, link, or directory tree, restoring owner permission
+    first when leftovers are read-only or untraversable."""
+    if os.path.islink(path) or not os.path.isdir(path):
+        try:
+            os.remove(path)
+        except OSError:
+            os.chmod(path, stat.S_IRWXU)
+            os.remove(path)
+        return
+    try:
+        names = os.listdir(path)
+    except OSError:
+        os.chmod(path, stat.S_IRWXU)
+        names = os.listdir(path)
+    # Removing children needs write permission on this directory itself.
+    try:
+        os.chmod(path, stat.S_IRWXU)
+    except OSError:
+        pass
+    for name in names:
+        _remove(os.path.join(path, name))
+    try:
+        os.rmdir(path)
+    except OSError:
+        os.chmod(path, stat.S_IRWXU)
+        os.rmdir(path)
 
 
 def main() -> int:
@@ -29,16 +59,7 @@ def main() -> int:
     os.makedirs(out_dir, exist_ok=True)
     # Clean only the contents of the output dir, never the dir itself.
     for name in os.listdir(out_dir):
-        path = os.path.join(out_dir, name)
-        if os.path.isdir(path) and not os.path.islink(path):
-            for root, dirs, files in os.walk(path, topdown=False):
-                for f in files:
-                    os.remove(os.path.join(root, f))
-                for d in dirs:
-                    os.rmdir(os.path.join(root, d))
-            os.rmdir(path)
-        else:
-            os.remove(path)
+        _remove(os.path.join(out_dir, name))
 
     out_path = os.path.join(out_dir, "entry.txt")
     with open(out_path, "w", encoding="utf-8", newline="") as f:
@@ -55,4 +76,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except OSError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
