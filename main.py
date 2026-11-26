@@ -40,9 +40,17 @@ def main() -> int:
         else:
             os.remove(path)
 
-    with open(os.path.join(out_dir, "entry.txt"), "w",
-              encoding="utf-8", newline="") as f:
+    out_path = os.path.join(out_dir, "entry.txt")
+    with open(out_path, "w", encoding="utf-8", newline="") as f:
         f.write(LINE)
+
+    # Verify the written file round-trips byte-identical; fail loudly
+    # instead of leaving a bad artifact behind.
+    with open(out_path, encoding="utf-8", newline="") as f:
+        if f.read() != LINE:
+            print("entry.txt does not match the intended line",
+                  file=sys.stderr)
+            return 1
     return 0
 
 
